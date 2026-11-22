@@ -3,221 +3,559 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>frmaeo — Send Photos to Dad's Frame</title>
+  <title>The Jimmy Frame — Family Portal</title>
   <link rel="stylesheet" href="/manage/manage.css" />
 </head>
 <body>
-  <!-- Token Auth Gate -->
+  <!-- Passcode Unlock Gate -->
   <div id="auth-gate" class="auth-gate">
     <div class="auth-card">
-      <div class="brand-mark">🖼️</div>
-      <h1>Dad's Photo Frame</h1>
-      <p class="muted">Enter the shared family token shown on the frame's Settings → Add Photos screen.</p>
-      <form id="auth-form">
-        <input id="token-input" type="text" placeholder="e.g. sunny-4821" autocomplete="off" required />
-        <button type="submit" class="btn-primary full">Unlock Frame</button>
+      <div class="auth-brand">
+        <span class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 28 28" fill="none">
+            <rect x="3" y="4" width="22" height="20" rx="5" stroke="currentColor" stroke-width="2.2"/>
+            <rect x="7.5" y="8.5" width="13" height="11" rx="2" fill="#d9ed92" stroke="currentColor" stroke-width="1.6"/>
+            <circle cx="11.5" cy="12.2" r="1.4" fill="currentColor"/>
+            <path d="M8.5 18l3.5-3.4 2.4 2.2 2.2-2.2 3.1 3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="brand-eyebrow">Private Family Portal</span>
+      </div>
+      <h1 id="auth-title">The Jimmy Frame</h1>
+      <p class="auth-copy">Enter the family passcode shown on the frame under <strong>Settings &rarr; Add Photos</strong> to share photos, leave a note, or adjust display settings.</p>
+      <form id="auth-form" class="auth-form">
+        <label class="sr-only" for="token-input">Family passcode</label>
+        <input id="token-input" type="text" placeholder="Enter passcode (e.g. maple-1356)" autocomplete="off" autocapitalize="none" spellcheck="false" required />
+        <button type="submit" class="btn btn-primary btn-full">Unlock Frame</button>
       </form>
-      <p id="auth-error" class="error-text hidden"></p>
+      <p id="auth-error" class="error-banner hidden" role="alert"></p>
     </div>
   </div>
 
-  <!-- Main Manage App -->
-  <div id="app" class="app hidden">
-    <header class="topbar">
-      <div class="topbar-inner">
-        <div>
-          <h1 id="frame-title">Dad's Frame</h1>
-          <span id="frame-subtitle" class="muted small">Local-only family photo frame</span>
+  <!-- Main Workspace Shell -->
+  <div id="app" class="app-viewport hidden">
+    <div class="app-shell">
+      <!-- Left Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="brand-lockup">
+            <span class="brand-icon" aria-hidden="true">
+              <svg viewBox="0 0 28 28" fill="none">
+                <rect x="3" y="4" width="22" height="20" rx="5" stroke="currentColor" stroke-width="2.2"/>
+                <rect x="7.5" y="8.5" width="13" height="11" rx="2" fill="#d9ed92" stroke="currentColor" stroke-width="1.6"/>
+                <circle cx="11.5" cy="12.2" r="1.4" fill="currentColor"/>
+                <path d="M8.5 18l3.5-3.4 2.4 2.2 2.2-2.2 3.1 3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <div class="brand-text">
+              <strong id="frame-title">The Jimmy Frame</strong>
+              <span>Local Wi-Fi Frame</span>
+            </div>
+          </div>
+
+          <nav class="side-nav" aria-label="Main navigation">
+            <button class="nav-item active" data-tab="upload">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Send Photos</span>
+            </button>
+            <button class="nav-item" data-tab="note">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span>Frame Note</span>
+              <span id="nav-note-dot" class="live-dot hidden" title="Active note on frame"></span>
+            </button>
+            <button class="nav-item" data-tab="gallery">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+              <span>Photo Library</span>
+              <span id="tab-count" class="nav-badge">0</span>
+            </button>
+            <button class="nav-item" data-tab="discover">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+              <span>Discover</span>
+            </button>
+            <button class="nav-item" data-tab="settings">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+              <span>Settings</span>
+            </button>
+          </nav>
         </div>
-        <button id="btn-logout" class="btn-ghost small-btn">Lock</button>
+
+        <!-- Deep Ocean Status Card (Sidebar Footer) -->
+        <div class="sidebar-card">
+          <div class="sidebar-card-head">
+            <span class="pulse-dot" aria-hidden="true"></span>
+            <span id="side-mode-label">Frame Connected</span>
+          </div>
+          <p id="side-summary" class="sidebar-card-copy">Private local storage. Photos go straight to the living room frame.</p>
+          <button type="button" id="side-quick-note" class="sidebar-card-btn">
+            <span id="side-note-cta">Post a Frame Note</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Column -->
+      <div class="main-col">
+        <header class="topbar">
+          <div class="topbar-left">
+            <h1 id="page-title">Send Photos</h1>
+            <p id="page-subtitle">Share moments directly to The Jimmy Frame over your local network.</p>
+          </div>
+          <div class="topbar-right">
+            <div class="status-pill" id="header-stats-pill">
+              <span class="status-pill-dot" aria-hidden="true"></span>
+              <span id="header-stats-text">Ready</span>
+            </div>
+            <button id="btn-logout" class="btn btn-subtle btn-sm" title="Lock portal">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>Lock</span>
+            </button>
+          </div>
+        </header>
+
+        <main class="workspace">
+          <!-- Pane 1: Send Photos -->
+          <section class="pane active" data-pane="upload">
+            <form id="upload-form" class="upload-layout">
+              <div class="surface-card drop-card">
+                <label id="dropzone" class="dropzone" for="file-input">
+                  <input id="file-input" type="file" accept="image/*,.heic,.heif" multiple hidden />
+                  <div class="drop-emblem" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  </div>
+                  <strong>Drop photos here, or browse</strong>
+                  <span>JPEG, PNG, WebP, or iPhone HEIC &middot; Optimized automatically for the frame</span>
+                </label>
+
+                <div id="preview-wrap" class="preview-wrap hidden">
+                  <div class="preview-header">
+                    <span id="preview-count" class="preview-count">0 photos selected</span>
+                    <button type="button" id="btn-clear-files" class="text-btn">Clear all</button>
+                  </div>
+                  <div id="preview-grid" class="preview-grid"></div>
+                </div>
+              </div>
+
+              <div class="surface-card details-card">
+                <div class="card-head">
+                  <h2>Photo Details</h2>
+                  <p>Optional details displayed quietly in the corner of the frame.</p>
+                </div>
+
+                <div class="form-stack">
+                  <div class="field">
+                    <label for="up-sender">Your Name</label>
+                    <input id="up-sender" type="text" placeholder="e.g. James" maxlength="60" />
+                  </div>
+
+                  <div class="field">
+                    <label for="up-album">Album</label>
+                    <input id="up-album" type="text" list="album-suggestions" placeholder="e.g. Holidays, Family, Weekend" maxlength="40" />
+                    <datalist id="album-suggestions"></datalist>
+                    <div id="album-quick-chips" class="quick-chips"></div>
+                  </div>
+
+                  <div class="field">
+                    <label for="up-caption">Caption</label>
+                    <input id="up-caption" type="text" placeholder="Add a short note or memory..." maxlength="180" />
+                  </div>
+                </div>
+
+                <div id="upload-progress-wrap" class="progress-wrap hidden">
+                  <div class="progress-meta">
+                    <span id="upload-progress-label">Preparing photos…</span>
+                    <span id="upload-progress-pct">0%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div id="upload-progress-bar" class="progress-bar"></div>
+                  </div>
+                </div>
+
+                <div class="card-footer">
+                  <button id="btn-upload" type="submit" class="btn btn-primary btn-full" disabled>Send to Frame</button>
+                </div>
+              </div>
+            </form>
+          </section>
+
+          <!-- Pane 2: Frame Note (Top Alert Banner) -->
+          <section class="pane" data-pane="note">
+            <div class="surface-card preview-stage-card">
+              <div class="preview-stage-top">
+                <div>
+                  <h2>Live Frame Preview</h2>
+                  <p>Your message floats cleanly across the top of The Jimmy Frame until dismissed or expired.</p>
+                </div>
+                <span id="note-status-badge" class="pill-badge neutral">No active note</span>
+              </div>
+
+              <div class="mini-frame-bezel">
+                <div class="mini-frame-screen">
+                  <div id="note-preview-banner" class="mini-notice tone-ocean">
+                    <span class="mini-notice-dot"></span>
+                    <span id="note-preview-text" class="mini-notice-text">Your message will appear right here at the top of the screen</span>
+                    <span id="note-preview-from" class="mini-notice-from hidden"></span>
+                  </div>
+                  <div class="mini-frame-clock">
+                    <strong>4:36 PM</strong>
+                    <span>Sun, Nov 22</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <form id="note-form" class="surface-card settings-sheet">
+              <div class="setting-row">
+                <div class="setting-meta">
+                  <label for="note-input">Message</label>
+                  <p>Keep it short and clear so it's easy to read from across the room.</p>
+                </div>
+                <div class="setting-control">
+                  <textarea id="note-input" rows="3" maxlength="160" placeholder="e.g. Dinner at 6pm — love you Dad!"></textarea>
+                  <div class="field-foot">
+                    <div class="quick-chips">
+                      <button type="button" class="chip-btn note-preset" data-text="Dinner at 6pm tonight!">Dinner at 6pm</button>
+                      <button type="button" class="chip-btn note-preset" data-text="Call me when you have a minute!">Call me</button>
+                      <button type="button" class="chip-btn note-preset" data-text="Just added new family photos for you!">New photos</button>
+                      <button type="button" class="chip-btn note-preset" data-text="Thinking of you today — love you!">Thinking of you</button>
+                    </div>
+                    <span id="note-char-count" class="char-count">0 / 160</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-meta">
+                  <label for="note-from">Signed By</label>
+                  <p>Optional name badge shown beside the message.</p>
+                </div>
+                <div class="setting-control">
+                  <input id="note-from" type="text" maxlength="40" placeholder="e.g. James" />
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-meta">
+                  <label>Banner Style</label>
+                  <p>Choose a palette tone that stands out against your photos.</p>
+                </div>
+                <div class="setting-control">
+                  <div class="tone-picker" role="radiogroup" aria-label="Banner style">
+                    <button type="button" class="tone-opt active" data-tone="ocean">
+                      <span class="tone-swatch swatch-ocean"></span>
+                      <span>Deep Ocean</span>
+                    </button>
+                    <button type="button" class="tone-opt" data-tone="teal">
+                      <span class="tone-swatch swatch-teal"></span>
+                      <span>Coastal Teal</span>
+                    </button>
+                    <button type="button" class="tone-opt" data-tone="sun">
+                      <span class="tone-swatch swatch-sun"></span>
+                      <span>Warm Lime</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-meta">
+                  <label>Display Duration</label>
+                  <p>Automatically clear the banner after a set time, or keep it up until dismissed.</p>
+                </div>
+                <div class="setting-control">
+                  <div class="seg-group" id="note-duration-group">
+                    <button type="button" class="seg-btn active" data-min="0">Until cleared</button>
+                    <button type="button" class="seg-btn" data-min="120">2 hours</button>
+                    <button type="button" class="seg-btn" data-min="720">12 hours</button>
+                    <button type="button" class="seg-btn" data-min="1440">24 hours</button>
+                    <button type="button" class="seg-btn" data-min="4320">3 days</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sheet-actions">
+                <button type="button" id="btn-clear-note" class="btn btn-outline hidden">Clear Active Note</button>
+                <button type="submit" id="btn-send-note" class="btn btn-primary">Display on Frame</button>
+              </div>
+            </form>
+          </section>
+
+          <!-- Pane 3: Photo Library -->
+          <section class="pane" data-pane="gallery">
+            <div class="toolbar-row">
+              <div class="filter-bar" role="tablist">
+                <button class="filter-pill active" data-filter="all">All</button>
+                <button class="filter-pill" data-filter="family">Family</button>
+                <button class="filter-pill" data-filter="public">Public</button>
+                <button class="filter-pill" data-filter="favorites">Favorites</button>
+                <button class="filter-pill" data-filter="hidden">Hidden</button>
+              </div>
+              <div class="search-field">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input id="gallery-search" type="search" placeholder="Filter by caption, person, or album..." />
+              </div>
+            </div>
+
+            <div id="gallery-grid" class="gallery-grid"></div>
+            <div id="gallery-empty" class="empty-state hidden">
+              <p>No photos match this view yet.</p>
+              <button type="button" id="empty-goto-upload" class="btn btn-subtle">Send your first photo</button>
+            </div>
+          </section>
+
+          <!-- Pane 4: Discover Public Collections -->
+          <section class="pane" data-pane="discover">
+            <div class="surface-card discover-search-card">
+              <div class="card-head">
+                <h2>Search Open-Access Imagery</h2>
+                <p>Pull high-resolution photography and museum artwork from Wikimedia Commons, The Met Museum, and NASA straight onto The Jimmy Frame.</p>
+              </div>
+              <form id="rem-search-form" class="inline-search-form">
+                <input id="rem-search-input" type="text" placeholder="Search lighthouses, classic cars, mountains, impressionism..." maxlength="60" required />
+                <button type="submit" id="rem-search-btn" class="btn btn-primary">Search &amp; Display</button>
+              </form>
+              <div class="quick-chips" style="margin-top: 12px;">
+                <button type="button" class="chip-btn discover-tag" data-q="lighthouses">Lighthouses</button>
+                <button type="button" class="chip-btn discover-tag" data-q="classic cars">Classic Cars</button>
+                <button type="button" class="chip-btn discover-tag" data-q="scottish highlands">Highlands</button>
+                <button type="button" class="chip-btn discover-tag" data-q="impressionism painting">Impressionism</button>
+                <button type="button" class="chip-btn discover-tag" data-q="deep space nebula">Deep Space</button>
+                <button type="button" class="chip-btn discover-tag" data-q="sailing ocean">Sailing</button>
+              </div>
+            </div>
+
+            <div class="collection-grid">
+              <article class="collection-card" data-cat="all">
+                <span class="collection-tag">Curated Mix</span>
+                <h3>All Collections</h3>
+                <p>A rotating blend of museum fine art, landscapes, architecture, and space imagery.</p>
+                <button type="button" class="btn btn-subtle btn-sm collection-go">Show on Frame</button>
+              </article>
+              <article class="collection-card" data-cat="fine_art">
+                <span class="collection-tag">The Met Museum</span>
+                <h3>Fine Art</h3>
+                <p>Open-access paintings, drawings, and classical masterpieces in high resolution.</p>
+                <button type="button" class="btn btn-subtle btn-sm collection-go">Show on Frame</button>
+              </article>
+              <article class="collection-card" data-cat="nature">
+                <span class="collection-tag">Wikimedia Featured</span>
+                <h3>Nature &amp; Wildlife</h3>
+                <p>Featured photography of landscapes, national parks, and wildlife around the globe.</p>
+                <button type="button" class="btn btn-subtle btn-sm collection-go">Show on Frame</button>
+              </article>
+              <article class="collection-card" data-cat="space">
+                <span class="collection-tag">NASA Archive</span>
+                <h3>Space &amp; Cosmos</h3>
+                <p>Telescope captures, nebulae, and historic spaceflight photography from NASA.</p>
+                <button type="button" class="btn btn-subtle btn-sm collection-go">Show on Frame</button>
+              </article>
+              <article class="collection-card" data-cat="architecture">
+                <span class="collection-tag">Wikimedia Featured</span>
+                <h3>Architecture</h3>
+                <p>Historic bridges, cathedrals, lighthouses, and remarkable architectural design.</p>
+                <button type="button" class="btn btn-subtle btn-sm collection-go">Show on Frame</button>
+              </article>
+              <article class="collection-card" data-cat="vintage">
+                <span class="collection-tag">Public Archives</span>
+                <h3>Vintage &amp; History</h3>
+                <p>Restored archival photographs and timeless scenes from past eras.</p>
+                <button type="button" class="btn btn-subtle btn-sm collection-go">Show on Frame</button>
+              </article>
+            </div>
+          </section>
+
+          <!-- Pane 5: Frame Settings -->
+          <section class="pane" data-pane="settings">
+            <div class="surface-card settings-sheet">
+              <div class="sheet-section-title">General &amp; Playback</div>
+
+              <div class="setting-row">
+                <div class="setting-meta">
+                  <label for="rem-frameName">Frame Name</label>
+                  <p>Shown on the welcome screen and in this family portal.</p>
+                </div>
+                <div class="setting-control">
+                  <input id="rem-frameName" type="text" maxlength="40" />
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-meta">
+                  <label for="rem-mode">Active Source</label>
+                  <p>Choose between private family photos, curated public collections, or a mix.</p>
+                </div>
+                <div class="setting-control">
+                  <select id="rem-mode">
+                    <option value="family">Family Photos</option>
+                    <option value="public">Public Collections</option>
+                    <option value="mix">Mix (Family + Public)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-meta">
+                  <label for="rem-interval">Slideshow Pacing</label>
+                  <p>How long each photo stays on screen before transitioning.</p>
+                </div>
+                <div class="setting-control two-col">
+                  <select id="rem-interval">
+                    <option value="10">10 seconds</option>
+                    <option value="20">20 seconds</option>
+                    <option value="30">30 seconds</option>
+                    <option value="60">1 minute</option>
+                    <option value="300">5 minutes</option>
+                    <option value="900">15 minutes</option>
+                  </select>
+                  <select id="rem-order" aria-label="Playback order">
+                    <option value="shuffle">Shuffle</option>
+                    <option value="newest">Newest First</option>
+                    <option value="chronological">Chronological</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-meta">
+                  <label for="rem-fit">Framing &amp; Collection</label>
+                  <p>How portrait and wide photos fit the 1280&times;800 display.</p>
+                </div>
+                <div class="setting-control two-col">
+                  <select id="rem-fit">
+                    <option value="ambient">Ambient Glow</option>
+                    <option value="fill">Fill Screen</option>
+                    <option value="matte">Dark Matte</option>
+                  </select>
+                  <select id="rem-publicCategory" aria-label="Public category">
+                    <option value="all">All Curated</option>
+                    <option value="fine_art">Fine Art</option>
+                    <option value="nature">Nature &amp; Wildlife</option>
+                    <option value="space">Space &amp; Cosmos</option>
+                    <option value="architecture">Architecture</option>
+                    <option value="vintage">Vintage &amp; History</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="sheet-section-title">Display Overlays &amp; Night Sleep</div>
+
+              <div class="setting-row">
+                <div class="setting-meta">
+                  <label>On-Screen Overlays</label>
+                  <p>Show a subtle clock or photo captions in the lower corners.</p>
+                </div>
+                <div class="setting-control toggle-stack">
+                  <label class="switch-row">
+                    <span>Clock &amp; Date</span>
+                    <input type="checkbox" id="rem-showClock" class="switch" />
+                  </label>
+                  <label class="switch-row">
+                    <span>Photo Captions</span>
+                    <input type="checkbox" id="rem-showCaption" class="switch" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-meta">
+                  <label>Night Sleep Schedule</label>
+                  <p>Dim the frame to a quiet clock overnight and wake automatically in the morning.</p>
+                </div>
+                <div class="setting-control">
+                  <label class="switch-row" style="margin-bottom: 12px;">
+                    <span>Enable Night Schedule</span>
+                    <input type="checkbox" id="rem-sleepEnabled" class="switch" />
+                  </label>
+                  <div class="two-col">
+                    <div class="field-inline">
+                      <label for="rem-sleepStart">Sleep at</label>
+                      <input id="rem-sleepStart" type="time" />
+                    </div>
+                    <div class="field-inline">
+                      <label for="rem-sleepEnd">Wake at</label>
+                      <input id="rem-sleepEnd" type="time" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sheet-actions">
+                <button id="btn-save-settings" type="button" class="btn btn-primary">Save Changes</button>
+              </div>
+            </div>
+          </section>
+        </main>
       </div>
-      <nav class="nav-tabs">
-        <button class="nav-tab active" data-tab="upload">Send Photos</button>
-        <button class="nav-tab" data-tab="gallery">Gallery <span id="tab-count" class="pill">0</span></button>
-        <button class="nav-tab" data-tab="settings">Frame Settings</button>
-      </nav>
-    </header>
+    </div>
 
-    <main class="container">
-      <!-- Upload Tab -->
-      <section class="pane active" data-pane="upload">
-        <form id="upload-form" class="card">
-          <label id="dropzone" class="dropzone" for="file-input">
-            <input id="file-input" type="file" accept="image/*" multiple hidden />
-            <div class="drop-icon">📷</div>
-            <strong>Tap to choose photos</strong>
-            <span class="muted small">or drag &amp; drop JPEGs, PNGs, or WebP from your device</span>
-          </label>
-
-          <div id="preview-grid" class="preview-grid hidden"></div>
-
-          <div class="field-grid">
-            <div class="field">
-              <label for="up-sender">Your Name</label>
-              <input id="up-sender" type="text" placeholder="e.g. James" maxlength="60" />
-            </div>
-            <div class="field">
-              <label for="up-album">Album (optional)</label>
-              <input id="up-album" type="text" list="album-suggestions" placeholder="e.g. Holidays, Grandkids" maxlength="40" />
-              <datalist id="album-suggestions"></datalist>
-            </div>
-          </div>
-
-          <div class="field">
-            <label for="up-caption">Caption (optional)</label>
-            <input id="up-caption" type="text" placeholder="Add a warm note for Dad..." maxlength="180" />
-          </div>
-
-          <div id="upload-progress-wrap" class="progress-wrap hidden">
-            <div id="upload-progress-bar" class="progress-bar"></div>
-          </div>
-
-          <button id="btn-upload" type="submit" class="btn-primary full" disabled>Send to Frame</button>
-        </form>
-      </section>
-
-      <!-- Gallery Tab -->
-      <section class="pane" data-pane="gallery">
-        <div class="filter-bar">
-          <button class="filter-pill active" data-filter="all">All</button>
-          <button class="filter-pill" data-filter="family">Family</button>
-          <button class="filter-pill" data-filter="public">Public</button>
-          <button class="filter-pill" data-filter="favorites">♥ Favorites</button>
-          <button class="filter-pill" data-filter="hidden">Hidden</button>
-        </div>
-
-        <div id="gallery-grid" class="gallery-grid"></div>
-        <p id="gallery-empty" class="muted center hidden">No photos in this view yet.</p>
-      </section>
-
-      <!-- Remote Frame Settings Tab -->
-      <section class="pane" data-pane="settings">
-        <div class="card settings-card">
-          <h2>Remote Slideshow Controls</h2>
-          <p class="muted small">Changes apply live on the frame immediately.</p>
-
-          <div class="field-grid">
-            <div class="field">
-              <label for="rem-mode">Slideshow Mode</label>
-              <select id="rem-mode">
-                <option value="family">Family Photos</option>
-                <option value="public">Public Gallery</option>
-                <option value="mix">Mix (Family + Public)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="rem-interval">Photo Duration</label>
-              <select id="rem-interval">
-                <option value="10">10 seconds</option>
-                <option value="20">20 seconds</option>
-                <option value="30">30 seconds</option>
-                <option value="60">1 minute</option>
-                <option value="300">5 minutes</option>
-                <option value="900">15 minutes</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="rem-order">Order</label>
-              <select id="rem-order">
-                <option value="shuffle">Shuffle</option>
-                <option value="newest">Newest First</option>
-                <option value="chronological">Chronological</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="rem-fit">Framing</label>
-              <select id="rem-fit">
-                <option value="ambient">Ambient Glow</option>
-                <option value="fill">Fill Screen</option>
-                <option value="matte">Dark Matte</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="rem-publicCategory">Public Category</label>
-              <select id="rem-publicCategory">
-                <option value="all">All Curated</option>
-                <option value="fine_art">Fine Art (The Met)</option>
-                <option value="nature">Nature &amp; Wildlife</option>
-                <option value="space">Space &amp; Cosmos (NASA)</option>
-                <option value="architecture">Architecture</option>
-                <option value="vintage">Vintage &amp; History</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="rem-frameName">Frame Name</label>
-              <input id="rem-frameName" type="text" maxlength="40" />
-            </div>
-          </div>
-
-          <div class="check-list">
-            <label><input type="checkbox" id="rem-showClock" /> Show Clock &amp; Date</label>
-            <label><input type="checkbox" id="rem-showCaption" /> Show Photo Caption</label>
-            <label><input type="checkbox" id="rem-sleepEnabled" /> Night Sleep Schedule</label>
-          </div>
-
-          <div class="field-grid">
-            <div class="field">
-              <label for="rem-sleepStart">Sleep At</label>
-              <input id="rem-sleepStart" type="time" />
-            </div>
-            <div class="field">
-              <label for="rem-sleepEnd">Wake At</label>
-              <input id="rem-sleepEnd" type="time" />
-            </div>
-          </div>
-
-          <button id="btn-save-settings" class="btn-primary">Save Settings</button>
-        </div>
-
-        <div class="card settings-card" style="margin-top: 16px;">
-          <h2>Search Public Images for Dad's Frame</h2>
-          <p class="muted small">Search Wikimedia Commons, The Met Museum &amp; NASA and display them on the frame.</p>
-          <form id="rem-search-form" style="display:flex; gap:10px; margin-top:12px;">
-            <input id="rem-search-input" type="text" placeholder="e.g. lighthouses, classic cars, mountains..." maxlength="60" required />
-            <button type="submit" id="rem-search-btn" class="btn-primary" style="white-space:nowrap;">Search &amp; Show</button>
-          </form>
-        </div>
-      </section>
-    </main>
+    <!-- Mobile Bottom Navigation -->
+    <nav class="mobile-nav" aria-label="Mobile navigation">
+      <button class="mnav-item active" data-tab="upload">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Send</span>
+      </button>
+      <button class="mnav-item" data-tab="note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span>Note</span>
+      </button>
+      <button class="mnav-item" data-tab="gallery">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span>Library</span>
+      </button>
+      <button class="mnav-item" data-tab="discover">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+        <span>Discover</span>
+      </button>
+      <button class="mnav-item" data-tab="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
   </div>
 
   <!-- Photo Edit Modal -->
-  <div id="edit-modal" class="modal hidden">
+  <div id="edit-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Edit photo details">
     <div class="modal-backdrop" id="edit-backdrop"></div>
     <div class="modal-box">
       <div class="modal-top">
         <h3>Photo Details</h3>
-        <button id="edit-close" class="btn-ghost small-btn">✕</button>
+        <button id="edit-close" class="icon-btn" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
       </div>
       <div class="edit-preview-wrap">
-        <img id="edit-img" alt="Preview" />
+        <img id="edit-img" alt="Photo preview" />
       </div>
-      <div id="edit-exif" class="exif-line muted small"></div>
-      <div class="field">
-        <label for="edit-caption">Caption</label>
-        <input id="edit-caption" type="text" />
-      </div>
-      <div class="field-grid">
+      <div id="edit-exif" class="exif-line"></div>
+      <div class="form-stack">
         <div class="field">
-          <label for="edit-sender">Sent By</label>
-          <input id="edit-sender" type="text" />
+          <label for="edit-caption">Caption</label>
+          <input id="edit-caption" type="text" placeholder="Add a caption..." />
         </div>
-        <div class="field">
-          <label for="edit-album">Album</label>
-          <input id="edit-album" type="text" list="album-suggestions" />
+        <div class="two-col">
+          <div class="field">
+            <label for="edit-sender">Sent By</label>
+            <input id="edit-sender" type="text" placeholder="Name" />
+          </div>
+          <div class="field">
+            <label for="edit-album">Album</label>
+            <input id="edit-album" type="text" list="album-suggestions" placeholder="Album" />
+          </div>
         </div>
       </div>
       <div class="edit-actions">
-        <button id="edit-rotate" class="btn-ghost">↻ Rotate</button>
-        <button id="edit-fav" class="btn-ghost">♡ Favorite</button>
-        <button id="edit-hide" class="btn-ghost">Hide</button>
-        <button id="edit-delete" class="btn-danger">Delete</button>
+        <button id="edit-rotate" type="button" class="btn btn-subtle btn-sm">Rotate 90&deg;</button>
+        <button id="edit-fav" type="button" class="btn btn-subtle btn-sm">Favorite</button>
+        <button id="edit-hide" type="button" class="btn btn-subtle btn-sm">Hide</button>
+        <button id="edit-delete" type="button" class="btn btn-danger-ghost btn-sm">Delete</button>
       </div>
-      <button id="edit-save" class="btn-primary full">Save Changes</button>
+      <div class="modal-footer">
+        <button id="edit-cancel" type="button" class="btn btn-outline">Cancel</button>
+        <button id="edit-save" type="button" class="btn btn-primary">Save Changes</button>
+      </div>
     </div>
   </div>
 
-  <div id="toast" class="toast hidden"></div>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="/manage/manage.js"></script>
 </body>

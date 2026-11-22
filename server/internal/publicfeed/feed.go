@@ -466,11 +466,48 @@ func (m *Manager) fetchMetObject(ctx context.Context, objID int, category, searc
 	return true, nil
 }
 
+// flexString safely unmarshals JSON strings, numbers, booleans, or nulls into a string.
+// Wikimedia's extmetadata API frequently mixes strings, numbers, and booleans in "value".
+type flexString string
+
+func (f *flexString) UnmarshalJSON(b []byte) error {
+	trimmed := strings.TrimSpace(string(b))
+	if trimmed == "" || trimmed == "null" {
+		*f = ""
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		*f = flexString(s)
+		return nil
+	}
+	var num json.Number
+	if err := json.Unmarshal(b, &num); err == nil {
+		*f = flexString(num.String())
+		return nil
+	}
+	var bv bool
+	if err := json.Unmarshal(b, &bv); err == nil {
+		if bv {
+			*f = "true"
+		} else {
+			*f = "false"
+		}
+		return nil
+	}
+	*f = flexString(trimmed)
+	return nil
+}
+
 func (m *Manager) searchWikimedia(ctx context.Context, query, category string, limit int) (int, error) {
 	q := url.QueryEscape(query + " filetype:bitmap")
+	gsrLimit := limit*3 + 6
+	if gsrLimit > 30 {
+		gsrLimit = 30
+	}
 	apiURL := fmt.Sprintf(
-		"https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=%s&gsrlimit=%d&prop=imageinfo&iiprop=url|extmetadata|mime&iiurlwidth=1600&format=json",
-		q, limit*2+4,
+		"https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=%s&gsrlimit=%d&prop=imageinfo&iiprop=url|extmetadata|mime|size&iiurlwidth=1280&format=json",
+		q, gsrLimit,
 	)
 	var resp struct {
 		Query struct {
@@ -481,8 +518,10 @@ func (m *Manager) searchWikimedia(ctx context.Context, query, category string, l
 					ThumbURL    string `json:"thumburl"`
 					URL         string `json:"url"`
 					Mime        string `json:"mime"`
+					Width       int    `json:"width"`
+					Height      int    `json:"height"`
 					ExtMetadata map[string]struct {
-						Value string `json:"value"`
+						Value flexString `json:"value"`
 					} `json:"extmetadata"`
 				} `json:"imageinfo"`
 			} `json:"pages"`
@@ -493,6 +532,7 @@ func (m *Manager) searchWikimedia(ctx context.Context, query, category string, l
 	}
 
 	added := 0
+	var lastErr error
 	for _, page := range resp.Query.Pages {
 		if added >= limit {
 			break
@@ -502,6 +542,9 @@ func (m *Manager) searchWikimedia(ctx context.Context, query, category string, l
 		}
 		info := page.ImageInfo[0]
 		if info.Mime != "" && !strings.HasPrefix(info.Mime, "image/jpeg") && !strings.HasPrefix(info.Mime, "image/png") && !strings.HasPrefix(info.Mime, "image/webp") {
+			continue
+		}
+		if info.Width > 0 && info.Height > 0 && (info.Width < 500 || info.Height < 350) {
 			continue
 		}
 		imgURL := info.ThumbURL
@@ -518,7 +561,7 @@ func (m *Manager) searchWikimedia(ctx context.Context, query, category string, l
 			continue
 		}
 
-		title := cleanHTML(info.ExtMetadata["ObjectName"].Value)
+		title := cleanHTML(string(info.ExtMetadata["ObjectName"].Value))
 		if title == "" {
 			title = strings.TrimPrefix(page.Title, "File:")
 			if idx := strings.LastIndex(title, "."); idx > 0 {
@@ -526,9 +569,9 @@ func (m *Manager) searchWikimedia(ctx context.Context, query, category string, l
 			}
 			title = strings.ReplaceAll(title, "_", " ")
 		}
-		artist := cleanHTML(info.ExtMetadata["Artist"].Value)
-		desc := cleanHTML(info.ExtMetadata["ImageDescription"].Value)
-		date := cleanHTML(info.ExtMetadata["DateTimeOriginal"].Value)
+		artist := cleanHTML(string(info.ExtMetadata["Artist"].Value))
+		desc := cleanHTML(string(info.ExtMetadata["ImageDescription"].Value))
+		date := cleanHTML(string(info.ExtMetadata["DateTimeOriginal"].Value))
 		if len(desc) > 220 {
 			desc = desc[:217] + "..."
 		}
@@ -538,7 +581,7 @@ func (m *Manager) searchWikimedia(ctx context.Context, query, category string, l
 		if strings.HasPrefix(category, "search:") {
 			searchQ = query
 		}
-		if err := m.downloadAndStore(ctx, imgURL, &store.PublicMeta{
+		meta := &store.PublicMeta{
 			Provider:    "wikimedia",
 			Category:    category,
 			SearchQuery: searchQ,
@@ -548,16 +591,27 @@ func (m *Manager) searchWikimedia(ctx context.Context, query, category string, l
 			Description: desc,
 			SourceURL:   "https://commons.wikimedia.org/wiki/" + url.PathEscape(page.Title),
 			ExternalID:  extID,
-		}); err == nil {
+		}
+		err := m.downloadAndStore(ctx, imgURL, meta)
+		if err != nil && info.URL != "" && info.URL != imgURL {
+			// Fallback to full URL if thumbnail endpoint rate-limited or failed
+			err = m.downloadAndStore(ctx, info.URL, meta)
+		}
+		if err == nil {
 			added++
 			m.bumpDone(fmt.Sprintf("Saved: %s", truncate(title, 38)))
+		} else {
+			lastErr = err
 		}
+	}
+	if added == 0 && lastErr != nil {
+		return 0, fmt.Errorf("wikimedia download: %w", lastErr)
 	}
 	return added, nil
 }
 
 func (m *Manager) searchNASA(ctx context.Context, query, category string, limit int) (int, error) {
-	apiURL := fmt.Sprintf("https://images-api.nasa.gov/search?q=%s&media_type=image&page_size=%d", url.QueryEscape(query), limit*2+4)
+	apiURL := fmt.Sprintf("https://images-api.nasa.gov/search?q=%s&media_type=image&page_size=%d", url.QueryEscape(query), limit*2+6)
 	var resp struct {
 		Collection struct {
 			Items []struct {
@@ -580,6 +634,7 @@ func (m *Manager) searchNASA(ctx context.Context, query, category string, limit 
 	}
 
 	added := 0
+	var lastErr error
 	for _, item := range resp.Collection.Items {
 		if added >= limit {
 			break
@@ -588,8 +643,17 @@ func (m *Manager) searchNASA(ctx context.Context, query, category string, limit 
 			continue
 		}
 		d := item.Data[0]
-		imgURL := item.Links[0].Href
-		if imgURL == "" {
+		var previewURL string
+		for _, lk := range item.Links {
+			if lk.Rel == "preview" && lk.Href != "" {
+				previewURL = lk.Href
+				break
+			}
+		}
+		if previewURL == "" {
+			previewURL = item.Links[0].Href
+		}
+		if previewURL == "" {
 			continue
 		}
 		extID := "nasa:" + d.NasaID
@@ -618,7 +682,7 @@ func (m *Manager) searchNASA(ctx context.Context, query, category string, limit 
 		if strings.HasPrefix(category, "search:") {
 			searchQ = query
 		}
-		if err := m.downloadAndStore(ctx, imgURL, &store.PublicMeta{
+		meta := &store.PublicMeta{
 			Provider:    "nasa",
 			Category:    category,
 			SearchQuery: searchQ,
@@ -628,10 +692,29 @@ func (m *Manager) searchNASA(ctx context.Context, query, category string, limit 
 			Description: desc,
 			SourceURL:   "https://images.nasa.gov/details/" + url.PathEscape(d.NasaID),
 			ExternalID:  extID,
-		}); err == nil {
+		}
+
+		// Try higher-res ~medium.jpg first, fall back to preview (~thumb.jpg)
+		var err error
+		if strings.Contains(previewURL, "~thumb.jpg") {
+			medURL := strings.Replace(previewURL, "~thumb.jpg", "~medium.jpg", 1)
+			err = m.downloadAndStore(ctx, medURL, meta)
+			if err != nil {
+				err = m.downloadAndStore(ctx, previewURL, meta)
+			}
+		} else {
+			err = m.downloadAndStore(ctx, previewURL, meta)
+		}
+
+		if err == nil {
 			added++
 			m.bumpDone(fmt.Sprintf("Saved: %s", truncate(title, 38)))
+		} else {
+			lastErr = err
 		}
+	}
+	if added == 0 && lastErr != nil {
+		return 0, fmt.Errorf("nasa download: %w", lastErr)
 	}
 	return added, nil
 }
@@ -641,7 +724,8 @@ func (m *Manager) downloadAndStore(ctx context.Context, imgURL string, meta *sto
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "frmaeo-photo-frame/1.0 (local personal digital frame)")
+	req.Header.Set("User-Agent", "TheJimmyFrame/1.0 (https://github.com/frmaeo; personal-digital-photo-frame)")
+	req.Header.Set("Accept", "image/*,*/*;q=0.8")
 	resp, err := m.client.Do(req)
 	if err != nil {
 		return err
@@ -689,7 +773,8 @@ func (m *Manager) getJSON(ctx context.Context, u string, dst any) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "frmaeo-photo-frame/1.0 (local personal digital frame)")
+	req.Header.Set("User-Agent", "TheJimmyFrame/1.0 (https://github.com/frmaeo; personal-digital-photo-frame)")
+	req.Header.Set("Accept", "application/json")
 	resp, err := m.client.Do(req)
 	if err != nil {
 		return err

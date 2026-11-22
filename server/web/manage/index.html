@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>frmaeo — Send Photos to Dad's Frame</title>
+  <link rel="stylesheet" href="/manage/manage.css" />
+</head>
+<body>
+  <!-- Token Auth Gate -->
+  <div id="auth-gate" class="auth-gate">
+    <div class="auth-card">
+      <div class="brand-mark">🖼️</div>
+      <h1>Dad's Photo Frame</h1>
+      <p class="muted">Enter the shared family token shown on the frame's Settings → Add Photos screen.</p>
+      <form id="auth-form">
+        <input id="token-input" type="text" placeholder="e.g. sunny-4821" autocomplete="off" required />
+        <button type="submit" class="btn-primary full">Unlock Frame</button>
+      </form>
+      <p id="auth-error" class="error-text hidden"></p>
+    </div>
+  </div>
+
+  <!-- Main Manage App -->
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div>
+          <h1 id="frame-title">Dad's Frame</h1>
+          <span id="frame-subtitle" class="muted small">Local-only family photo frame</span>
+        </div>
+        <button id="btn-logout" class="btn-ghost small-btn">Lock</button>
+      </div>
+      <nav class="nav-tabs">
+        <button class="nav-tab active" data-tab="upload">Send Photos</button>
+        <button class="nav-tab" data-tab="gallery">Gallery <span id="tab-count" class="pill">0</span></button>
+        <button class="nav-tab" data-tab="settings">Frame Settings</button>
+      </nav>
+    </header>
+
+    <main class="container">
+      <!-- Upload Tab -->
+      <section class="pane active" data-pane="upload">
+        <form id="upload-form" class="card">
+          <label id="dropzone" class="dropzone" for="file-input">
+            <input id="file-input" type="file" accept="image/*" multiple hidden />
+            <div class="drop-icon">📷</div>
+            <strong>Tap to choose photos</strong>
+            <span class="muted small">or drag &amp; drop JPEGs, PNGs, or WebP from your device</span>
+          </label>
+
+          <div id="preview-grid" class="preview-grid hidden"></div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label for="up-sender">Your Name</label>
+              <input id="up-sender" type="text" placeholder="e.g. James" maxlength="60" />
+            </div>
+            <div class="field">
+              <label for="up-album">Album (optional)</label>
+              <input id="up-album" type="text" list="album-suggestions" placeholder="e.g. Holidays, Grandkids" maxlength="40" />
+              <datalist id="album-suggestions"></datalist>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="up-caption">Caption (optional)</label>
+            <input id="up-caption" type="text" placeholder="Add a warm note for Dad..." maxlength="180" />
+          </div>
+
+          <div id="upload-progress-wrap" class="progress-wrap hidden">
+            <div id="upload-progress-bar" class="progress-bar"></div>
+          </div>
+
+          <button id="btn-upload" type="submit" class="btn-primary full" disabled>Send to Frame</button>
+        </form>
+      </section>
+
+      <!-- Gallery Tab -->
+      <section class="pane" data-pane="gallery">
+        <div class="filter-bar">
+          <button class="filter-pill active" data-filter="all">All</button>
+          <button class="filter-pill" data-filter="family">Family</button>
+          <button class="filter-pill" data-filter="public">Public</button>
+          <button class="filter-pill" data-filter="favorites">♥ Favorites</button>
+          <button class="filter-pill" data-filter="hidden">Hidden</button>
+        </div>
+
+        <div id="gallery-grid" class="gallery-grid"></div>
+        <p id="gallery-empty" class="muted center hidden">No photos in this view yet.</p>
+      </section>
+
+      <!-- Remote Frame Settings Tab -->
+      <section class="pane" data-pane="settings">
+        <div class="card settings-card">
+          <h2>Remote Slideshow Controls</h2>
+          <p class="muted small">Changes apply live on the frame immediately.</p>
+
+          <div class="field-grid">
+            <div class="field">
+              <label for="rem-mode">Slideshow Mode</label>
+              <select id="rem-mode">
+                <option value="family">Family Photos</option>
+                <option value="public">Public Gallery</option>
+                <option value="mix">Mix (Family + Public)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="rem-interval">Photo Duration</label>
+              <select id="rem-interval">
+                <option value="10">10 seconds</option>
+                <option value="20">20 seconds</option>
+                <option value="30">30 seconds</option>
+                <option value="60">1 minute</option>
+                <option value="300">5 minutes</option>
+                <option value="900">15 minutes</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="rem-order">Order</label>
+              <select id="rem-order">
+                <option value="shuffle">Shuffle</option>
+                <option value="newest">Newest First</option>
+                <option value="chronological">Chronological</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="rem-fit">Framing</label>
+              <select id="rem-fit">
+                <option value="ambient">Ambient Glow</option>
+                <option value="fill">Fill Screen</option>
+                <option value="matte">Dark Matte</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="rem-publicCategory">Public Category</label>
+              <select id="rem-publicCategory">
+                <option value="all">All Curated</option>
+                <option value="fine_art">Fine Art (The Met)</option>
+                <option value="nature">Nature &amp; Wildlife</option>
+                <option value="space">Space &amp; Cosmos (NASA)</option>
+                <option value="architecture">Architecture</option>
+                <option value="vintage">Vintage &amp; History</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="rem-frameName">Frame Name</label>
+              <input id="rem-frameName" type="text" maxlength="40" />
+            </div>
+          </div>
+
+          <div class="check-list">
+            <label><input type="checkbox" id="rem-showClock" /> Show Clock &amp; Date</label>
+            <label><input type="checkbox" id="rem-showCaption" /> Show Photo Caption</label>
+            <label><input type="checkbox" id="rem-sleepEnabled" /> Night Sleep Schedule</label>
+          </div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label for="rem-sleepStart">Sleep At</label>
+              <input id="rem-sleepStart" type="time" />
+            </div>
+            <div class="field">
+              <label for="rem-sleepEnd">Wake At</label>
+              <input id="rem-sleepEnd" type="time" />
+            </div>
+          </div>
+
+          <button id="btn-save-settings" class="btn-primary">Save Settings</button>
+        </div>
+
+        <div class="card settings-card" style="margin-top: 16px;">
+          <h2>Search Public Images for Dad's Frame</h2>
+          <p class="muted small">Search Wikimedia Commons, The Met Museum &amp; NASA and display them on the frame.</p>
+          <form id="rem-search-form" style="display:flex; gap:10px; margin-top:12px;">
+            <input id="rem-search-input" type="text" placeholder="e.g. lighthouses, classic cars, mountains..." maxlength="60" required />
+            <button type="submit" id="rem-search-btn" class="btn-primary" style="white-space:nowrap;">Search &amp; Show</button>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Photo Edit Modal -->
+  <div id="edit-modal" class="modal hidden">
+    <div class="modal-backdrop" id="edit-backdrop"></div>
+    <div class="modal-box">
+      <div class="modal-top">
+        <h3>Photo Details</h3>
+        <button id="edit-close" class="btn-ghost small-btn">✕</button>
+      </div>
+      <div class="edit-preview-wrap">
+        <img id="edit-img" alt="Preview" />
+      </div>
+      <div id="edit-exif" class="exif-line muted small"></div>
+      <div class="field">
+        <label for="edit-caption">Caption</label>
+        <input id="edit-caption" type="text" />
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label for="edit-sender">Sent By</label>
+          <input id="edit-sender" type="text" />
+        </div>
+        <div class="field">
+          <label for="edit-album">Album</label>
+          <input id="edit-album" type="text" list="album-suggestions" />
+        </div>
+      </div>
+      <div class="edit-actions">
+        <button id="edit-rotate" class="btn-ghost">↻ Rotate</button>
+        <button id="edit-fav" class="btn-ghost">♡ Favorite</button>
+        <button id="edit-hide" class="btn-ghost">Hide</button>
+        <button id="edit-delete" class="btn-danger">Delete</button>
+      </div>
+      <button id="edit-save" class="btn-primary full">Save Changes</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/manage/manage.js"></script>
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>frmaeo — Digital Photo Frame</title>
+  <link rel="stylesheet" href="/kiosk.css" />
+</head>
+<body>
+  <!-- Main Photo Stage (dual-buffered for zero-flicker transitions) -->
+  <main id="stage" class="stage fit-ambient" aria-label="Photo slideshow">
+    <div id="layer-a" class="slide-layer active">
+      <img class="backdrop" alt="" aria-hidden="true" />
+      <img class="photo" alt="" />
+    </div>
+    <div id="layer-b" class="slide-layer">
+      <img class="backdrop" alt="" aria-hidden="true" />
+      <img class="photo" alt="" />
+    </div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <!-- Empty state when no photos exist in current mode -->
+    <section id="empty-state" class="empty-state hidden">
+      <div class="empty-card glass">
+        <div class="empty-qr-wrap">
+          <img id="empty-qr" src="/api/qr.svg" alt="Scan to upload photos" />
+        </div>
+        <div class="empty-copy">
+          <p class="eyebrow" id="empty-eyebrow">Welcome to Dad's Frame</p>
+          <h1 id="empty-title">Ready for your first photos</h1>
+          <p id="empty-desc">Scan this QR code from any phone on your Wi-Fi to send family photos straight to this frame — no accounts, 100% local.</p>
+          <div id="empty-progress" class="pub-progress-box hidden">
+            <div class="slider-header">
+              <span id="empty-progress-label" class="small">Downloading...</span>
+              <span id="empty-progress-pct" class="mono-pill">0%</span>
+            </div>
+            <div class="progress-track">
+              <div id="empty-progress-bar" class="progress-fill" style="width: 0%"></div>
+            </div>
+          </div>
+          <div class="empty-meta">
+            <span id="empty-url" class="mono-pill">http://frame.local:8080/manage</span>
+            <span id="empty-token" class="mono-pill accent">Token: ...</span>
+          </div>
+          <div class="empty-actions">
+            <button id="empty-public-btn" class="btn-primary">Explore Public Gallery</button>
+            <button id="empty-settings-btn" class="btn-ghost">Open Settings</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ambient Overlays (visible when HUD is hidden) -->
+    <div id="ambient-clock" class="ambient-pill ambient-clock">
+      <div id="clock-time" class="clock-time">4:36</div>
+      <div id="clock-date" class="clock-date">Sun, Nov 22</div>
+    </div>
+
+    <div id="ambient-caption" class="ambient-pill ambient-caption hidden">
+      <div id="cap-title" class="cap-title"></div>
+      <div id="cap-sub" class="cap-sub"></div>
+    </div>
+
+    <!-- Heart burst feedback animation -->
+    <div id="heart-burst" class="heart-burst" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+    </div>
+
+    <!-- Touch HUD Overlay -->
+    <div id="hud" class="hud hidden">
+      <header class="hud-top">
+        <div class="mode-switcher glass" role="tablist" aria-label="Slideshow source">
+          <button class="mode-btn" data-mode="family" role="tab">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z"/></svg>
+            <span>Family</span>
+            <em class="count" id="count-family">0</em>
+          </button>
+          <button class="mode-btn" data-mode="public" role="tab">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+            <span>Public</span>
+            <em class="count" id="count-public">0</em>
+          </button>
+          <button class="mode-btn" data-mode="mix" role="tab">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg>
+            <span>Mix</span>
+          </button>
+        </div>
+
+        <div class="hud-top-right">
+          <select id="album-select" class="glass select-pill" aria-label="Filter album">
+            <option value="">All Family</option>
+            <option value="favorites">♥ Favorites</option>
+          </select>
+          <select id="pub-cat-select" class="glass select-pill hidden" aria-label="Public category">
+            <option value="all">All Curated</option>
+            <option value="fine_art">Fine Art</option>
+            <option value="nature">Nature &amp; Wildlife</option>
+            <option value="space">Space &amp; Cosmos</option>
+            <option value="architecture">Architecture</option>
+            <option value="vintage">Vintage &amp; History</option>
+          </select>
+          <div id="photo-counter" class="glass counter-pill">0 / 0</div>
+        </div>
+      </header>
+
+      <footer class="hud-dock glass" role="toolbar" aria-label="Slideshow controls">
+        <button id="btn-prev" class="dock-btn" aria-label="Previous photo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>
+          <span>Prev</span>
+        </button>
+        <button id="btn-play" class="dock-btn dock-primary" aria-label="Play or pause">
+          <svg id="icon-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+          <svg id="icon-play" class="hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5-12-7.5z"/></svg>
+          <span id="label-play">Pause</span>
+        </button>
+        <button id="btn-next" class="dock-btn" aria-label="Next photo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 18l6-6-6-6"/></svg>
+          <span>Next</span>
+        </button>
+
+        <div class="dock-divider"></div>
+
+        <button id="btn-fav" class="dock-btn" aria-label="Favorite photo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          <span>Favorite</span>
+        </button>
+        <button id="btn-info" class="dock-btn" aria-label="Photo details and EXIF">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <span>Details</span>
+        </button>
+        <button id="btn-fit" class="dock-btn" aria-label="Toggle fit mode">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 9h8v6H8z"/></svg>
+          <span id="label-fit">Ambient</span>
+        </button>
+        <button id="btn-settings" class="dock-btn" aria-label="Device and frame settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Settings</span>
+        </button>
+      </footer>
+    </div>
+
+    <!-- Photo Details & EXIF Slide-up Drawer -->
+    <aside id="info-drawer" class="drawer hidden" role="dialog" aria-modal="true" aria-label="Photo details">
+      <div class="drawer-backdrop" data-close="info-drawer"></div>
+      <div class="drawer-sheet glass">
+        <div class="sheet-handle"></div>
+        <div class="drawer-header">
+          <div>
+            <span id="info-badge" class="source-badge">Family Photo</span>
+            <h2 id="info-title">Untitled Photo</h2>
+            <p id="info-subtitle" class="muted"></p>
+          </div>
+          <button class="icon-close" data-close="info-drawer" aria-label="Close details">✕</button>
+        </div>
+
+        <p id="info-description" class="info-description hidden"></p>
+
+        <div id="info-meta-grid" class="info-meta-grid"></div>
+        <div id="info-exif-chips" class="exif-chips"></div>
+
+        <div class="drawer-actions">
+          <button id="info-rotate" class="btn-chip">↻ Rotate 90°</button>
+          <button id="info-fav" class="btn-chip">♡ Favorite</button>
+          <button id="info-hide" class="btn-chip danger">⊘ Hide Photo</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Full House Settings Modal -->
+    <aside id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Frame and device settings">
+      <div class="drawer-backdrop" data-close="settings-modal"></div>
+      <div class="modal-card glass">
+        <div class="modal-header">
+          <h2>Frame &amp; Device Settings</h2>
+          <button class="icon-close" data-close="settings-modal" aria-label="Close settings">✕</button>
+        </div>
+
+        <nav class="settings-tabs" role="tablist">
+          <button class="tab-btn active" data-tab="slideshow">Slideshow</button>
+          <button class="tab-btn" data-tab="public">Public Feed</button>
+          <button class="tab-btn" data-tab="display">Display &amp; Sleep</button>
+          <button class="tab-btn" data-tab="add">Add Photos</button>
+          <button class="tab-btn" data-tab="device">Device</button>
+        </nav>
+
+        <div class="modal-body">
+          <!-- Tab 1: Slideshow -->
+          <section class="tab-pane active" data-pane="slideshow">
+            <div class="setting-group">
+              <label>Photo Duration</label>
+              <div class="chip-row" data-setting="intervalSec">
+                <button class="opt-chip" data-val="10">10s</button>
+                <button class="opt-chip" data-val="20">20s</button>
+                <button class="opt-chip" data-val="30">30s</button>
+                <button class="opt-chip" data-val="60">1 min</button>
+                <button class="opt-chip" data-val="300">5 min</button>
+                <button class="opt-chip" data-val="900">15 min</button>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <label>Playback Order</label>
+              <div class="chip-row" data-setting="order">
+                <button class="opt-chip" data-val="shuffle">Shuffle</button>
+                <button class="opt-chip" data-val="newest">Newest First</button>
+                <button class="opt-chip" data-val="chronological">Chronological</button>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <label>Transition Style</label>
+              <div class="chip-row" data-setting="transition">
+                <button class="opt-chip" data-val="kenburns">Gentle Motion</button>
+                <button class="opt-chip" data-val="fade">Crossfade</button>
+                <button class="opt-chip" data-val="slide">Slide</button>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <label>Photo Framing</label>
+              <div class="chip-row" data-setting="fitMode">
+                <button class="opt-chip" data-val="ambient">Ambient Glow</button>
+                <button class="opt-chip" data-val="fill">Fill Screen</button>
+                <button class="opt-chip" data-val="matte">Dark Matte</button>
+              </div>
+            </div>
+
+            <div class="toggle-grid">
+              <label class="toggle-row">
+                <span>Show Clock &amp; Date</span>
+                <input type="checkbox" id="set-showClock" />
+              </label>
+              <label class="toggle-row">
+                <span>24-Hour Clock</span>
+                <input type="checkbox" id="set-clock24h" />
+              </label>
+              <label class="toggle-row">
+                <span>Show Photo Caption / Title</span>
+                <input type="checkbox" id="set-showCaption" />
+              </label>
+              <label class="toggle-row">
+                <span>Show Date &amp; Location</span>
+                <input type="checkbox" id="set-showDateBadge" />
+              </label>
+            </div>
+          </section>
+
+          <!-- Tab 2: Public Feed -->
+          <section class="tab-pane" data-pane="public">
+            <p class="pane-intro">Public mode pulls curated open-access artwork, photography, and space imagery onto the frame and caches them locally. Your family photos never leave the device.</p>
+
+            <div class="setting-group">
+              <label>Category</label>
+              <div class="chip-row" data-setting="publicCategory">
+                <button class="opt-chip" data-val="all">All Curated</button>
+                <button class="opt-chip" data-val="fine_art">Fine Art</button>
+                <button class="opt-chip" data-val="nature">Nature &amp; Wildlife</button>
+                <button class="opt-chip" data-val="space">Space &amp; Cosmos</button>
+                <button class="opt-chip" data-val="architecture">Architecture</button>
+                <button class="opt-chip" data-val="vintage">Vintage &amp; History</button>
+              </div>
+            </div>
+
+            <div class="setting-group">
+              <label for="pub-search-input">Search Public Images</label>
+              <form id="pub-search-form" class="search-row">
+                <input id="pub-search-input" type="text" class="search-input" placeholder="e.g. lighthouses, classic cars, mountains, monet..." maxlength="60" />
+                <button type="submit" id="btn-pub-search" class="btn-primary">Search</button>
+              </form>
+              <div class="quick-tags">
+                <button type="button" class="tag-chip" data-q="lighthouses">Lighthouses</button>
+                <button type="button" class="tag-chip" data-q="african wildlife">Wildlife</button>
+                <button type="button" class="tag-chip" data-q="mountains sunset">Mountains</button>
+                <button type="button" class="tag-chip" data-q="classic cars">Classic Cars</button>
+                <button type="button" class="tag-chip" data-q="impressionism painting">Impressionism</button>
+                <button type="button" class="tag-chip" data-q="sailing ocean">Ocean</button>
+              </div>
+            </div>
+
+            <div class="status-box status-col">
+              <div class="status-top">
+                <div>
+                  <div class="stat-label">Public Gallery Cache</div>
+                  <div id="pub-status-text" class="stat-value">0 photos cached</div>
+                </div>
+                <button id="btn-refresh-public" class="btn-ghost">Refresh Category</button>
+              </div>
+              <div id="pub-progress-wrap" class="pub-progress-inner hidden">
+                <div class="progress-track">
+                  <div id="pub-progress-bar" class="progress-fill" style="width: 0%"></div>
+                </div>
+                <div class="slider-header small muted">
+                  <span id="pub-progress-item">Starting...</span>
+                  <span id="pub-progress-pct" class="mono">0%</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Tab 3: Display & Sleep -->
+          <section class="tab-pane" data-pane="display">
+            <div class="setting-group">
+              <div class="slider-header">
+                <label for="set-brightness">Screen Brightness</label>
+                <span id="brightness-pct" class="mono-pill">78%</span>
+              </div>
+              <input type="range" id="set-brightness" min="15" max="255" step="5" value="200" class="touch-slider" />
+            </div>
+
+            <div class="toggle-grid">
+              <label class="toggle-row">
+                <span>Automatic Night Sleep Schedule</span>
+                <input type="checkbox" id="set-sleepEnabled" />
+              </label>
+            </div>
+
+            <div class="time-row">
+              <div class="setting-group">
+                <label for="set-sleepStart">Sleep At</label>
+                <input type="time" id="set-sleepStart" value="22:00" class="time-input" />
+              </div>
+              <div class="setting-group">
+                <label for="set-sleepEnd">Wake At</label>
+                <input type="time" id="set-sleepEnd" value="07:00" class="time-input" />
+              </div>
+            </div>
+
+            <div class="status-box">
+              <div>
+                <div class="stat-label">Instant Standby</div>
+                <div class="muted">Dims the screen to a subtle night clock. Tap anywhere to wake.</div>
+              </div>
+              <button id="btn-sleep-now" class="btn-ghost">Sleep Now</button>
+            </div>
+          </section>
+
+          <!-- Tab 4: Add Photos (QR) -->
+          <section class="tab-pane" data-pane="add">
+            <div class="qr-layout">
+              <div class="qr-box">
+                <img id="settings-qr" src="/api/qr.svg" alt="Scan to upload photos" />
+              </div>
+              <div class="qr-details">
+                <h3>Send photos from any phone</h3>
+                <p class="muted">Connect to Dad's Wi-Fi and scan the QR code — or open the address below in any browser.</p>
+                <div class="kv-list">
+                  <div><span>Local URL</span><strong id="qr-friendly-url" class="mono">http://frame.local:8080/manage</strong></div>
+                  <div><span>LAN Address</span><strong id="qr-lan-url" class="mono">—</strong></div>
+                  <div id="qr-ts-row" class="hidden"><span>Tailscale</span><strong id="qr-ts-url" class="mono">—</strong></div>
+                  <div><span>Family Token</span><strong id="qr-token" class="mono accent">—</strong></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Tab 5: Device & System -->
+          <section class="tab-pane" data-pane="device">
+            <div class="storage-card">
+              <div class="slider-header">
+                <span>Local Storage</span>
+                <span id="storage-text" class="mono-pill">—</span>
+              </div>
+              <div class="progress-track">
+                <div id="storage-bar" class="progress-fill" style="width: 12%"></div>
+              </div>
+              <div id="library-breakdown" class="muted small"></div>
+            </div>
+
+            <div class="device-grid">
+              <button id="btn-wifi" class="device-btn">
+                <strong>Wi-Fi Settings</strong>
+                <span>Switch network or check signal</span>
+              </button>
+              <button id="btn-tailscale" class="device-btn">
+                <strong>Tailscale VPN</strong>
+                <span>Remote family access</span>
+              </button>
+              <button id="btn-reload" class="device-btn">
+                <strong>Reload Display</strong>
+                <span>Refresh UI &amp; playlist</span>
+              </button>
+              <button id="btn-reboot" class="device-btn danger">
+                <strong>Reboot Frame</strong>
+                <span>Restart the device</span>
+              </button>
+            </div>
+
+            <div id="device-sys-info" class="sys-footer muted small"></div>
+          </section>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Brightness dimmer fallback (for non-native browser dev preview) -->
+    <div id="sim-dimmer" class="sim-dimmer" aria-hidden="true"></div>
+
+    <!-- Night Sleep Screen -->
+    <div id="sleep-overlay" class="sleep-overlay hidden" role="button" tabindex="0" aria-label="Tap to wake photo frame">
+      <div id="sleep-clock" class="sleep-clock">22:00</div>
+      <div class="sleep-hint">Tap anywhere to wake</div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast glass hidden" role="status" aria-live="polite">
+      <span id="toast-msg"></span>
+      <button id="toast-action" class="toast-action hidden"></button>
+    </div>
+  </main>
+
+  <script src="/kiosk.js"></script>
+</body>
+</html>

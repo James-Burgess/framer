@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="KioskTheme" parent="android:Theme.NoTitleBar.Fullscreen">
+        <item name="android:windowBackground">#0A0A0C</item>
+        <item name="android:colorBackground">#0A0A0C</item>
+    </style>
+</resources>

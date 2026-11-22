@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>frmaeo — Digital Photo Frame</title>
+  <title>The Jimmy Frame</title>
   <link rel="stylesheet" href="/kiosk.css" />
 </head>
 <body>
@@ -19,6 +19,18 @@
     </div>
     <div class="vignette" aria-hidden="true"></div>
 
+    <!-- Top Floating Alert / Message Banner -->
+    <div id="frame-notice" class="frame-notice tone-ocean hidden" role="status" aria-live="polite">
+      <div class="notice-dot" aria-hidden="true"></div>
+      <div class="notice-body">
+        <span id="notice-text" class="notice-text"></span>
+        <span id="notice-from" class="notice-from hidden"></span>
+      </div>
+      <button id="notice-dismiss" class="notice-dismiss" aria-label="Dismiss message">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
     <!-- Empty state when no photos exist in current mode -->
     <section id="empty-state" class="empty-state hidden">
       <div class="empty-card glass">
@@ -26,7 +38,7 @@
           <img id="empty-qr" src="/api/qr.svg" alt="Scan to upload photos" />
         </div>
         <div class="empty-copy">
-          <p class="eyebrow" id="empty-eyebrow">Welcome to Dad's Frame</p>
+          <p class="eyebrow" id="empty-eyebrow">Welcome to The Jimmy Frame</p>
           <h1 id="empty-title">Ready for your first photos</h1>
           <p id="empty-desc">Scan this QR code from any phone on your Wi-Fi to send family photos straight to this frame — no accounts, 100% local.</p>
           <div id="empty-progress" class="pub-progress-box hidden">
@@ -342,7 +354,7 @@
               </div>
               <div class="qr-details">
                 <h3>Send photos from any phone</h3>
-                <p class="muted">Connect to Dad's Wi-Fi and scan the QR code — or open the address below in any browser.</p>
+                <p class="muted">Connect to your Wi-Fi and scan the QR code — or open the address below in any browser.</p>
                 <div class="kv-list">
                   <div><span>Local URL</span><strong id="qr-friendly-url" class="mono">http://frame.local:8080/manage</strong></div>
                   <div><span>LAN Address</span><strong id="qr-lan-url" class="mono">—</strong></div>

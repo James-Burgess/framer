@@ -27,7 +27,8 @@
       sleepStart: "22:00",
       sleepEnd: "07:00",
       familyToken: "",
-      frameName: "Dad's Frame",
+      frameName: "The Jimmy Frame",
+      notice: null,
     },
     stats: null,
     index: 0,
@@ -127,7 +128,10 @@
     await loadSlideshow(true);
     await loadSystemStats();
     connectSSE();
-    setInterval(checkSleepSchedule, 15000);
+    setInterval(() => {
+      checkSleepSchedule();
+      renderNotice();
+    }, 15000);
     setInterval(loadSystemStats, 60000);
   }
 
@@ -321,7 +325,7 @@
       $("#empty-desc").textContent = "Downloading museum masterpieces, Wikimedia featured photography, and NASA space imagery to local cache. Make sure the frame is on Wi-Fi.";
       $("#empty-public-btn").textContent = "Refresh Public Feed";
     } else {
-      $("#empty-eyebrow").textContent = `Welcome to ${state.settings.frameName || "Dad's Frame"}`;
+      $("#empty-eyebrow").textContent = `Welcome to ${state.settings.frameName || "The Jimmy Frame"}`;
       $("#empty-title").textContent = "Ready for your first family photos";
       $("#empty-desc").textContent = "Scan this QR code from any phone on your Wi-Fi to send family photos straight to this frame — no accounts, 100% local.";
       $("#empty-public-btn").textContent = "Explore Public Gallery";
@@ -373,9 +377,33 @@
 
     Bridge.setBrightness(st.brightness);
     updateClock();
+    renderNotice();
     const p = currentPhoto();
     if (p) updatePhotoOverlays(p);
     resetSlideTimer();
+  }
+
+  function renderNotice() {
+    const el = $("#frame-notice");
+    if (!el) return;
+    const n = state.settings.notice;
+    const expired = n && n.expiresAt && new Date(n.expiresAt).getTime() <= Date.now();
+    if (!n || !n.text || !n.text.trim() || expired) {
+      el.classList.add("hidden");
+      return;
+    }
+    el.classList.remove("tone-ocean", "tone-teal", "tone-sun");
+    const tone = ["ocean", "teal", "sun"].includes(n.tone) ? n.tone : "ocean";
+    el.classList.add(`tone-${tone}`);
+    $("#notice-text").textContent = n.text.trim();
+    const fromEl = $("#notice-from");
+    if (n.from && n.from.trim()) {
+      fromEl.textContent = `From ${n.from.trim()}`;
+      fromEl.classList.remove("hidden");
+    } else {
+      fromEl.classList.add("hidden");
+    }
+    el.classList.remove("hidden");
   }
 
   function syncHUDControls() {
@@ -761,6 +789,13 @@
       } catch (_) {}
     });
     es.addEventListener("photo_deleted", () => loadSlideshow(false));
+    es.addEventListener("notice_changed", (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        state.settings.notice = data.notice || null;
+        renderNotice();
+      } catch (_) {}
+    });
     es.addEventListener("settings_changed", (e) => {
       try {
         const updated = JSON.parse(e.data);
@@ -813,6 +848,14 @@
     $("#btn-fav").addEventListener("click", () => { bumpHUDTimer(); toggleFavorite(); });
     $("#btn-info").addEventListener("click", () => openModal("info-drawer"));
     $("#btn-settings").addEventListener("click", () => openModal("settings-modal"));
+    $("#notice-dismiss").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      state.settings.notice = null;
+      renderNotice();
+      try {
+        await apiJSON("/api/notice", { method: "DELETE" });
+      } catch (_) {}
+    });
 
     $("#btn-fit").addEventListener("click", () => {
       bumpHUDTimer();
@@ -962,7 +1005,7 @@
     let startX = 0, startY = 0, startT = 0, tracking = false;
 
     stage.addEventListener("pointerdown", (e) => {
-      if (e.target.closest(".hud-top, .hud-dock, .drawer, .modal, .empty-card, .sleep-overlay, .toast")) {
+      if (e.target.closest(".hud-top, .hud-dock, .drawer, .modal, .empty-card, .sleep-overlay, .toast, .frame-notice")) {
         return;
       }
       tracking = true;

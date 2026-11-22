@@ -1,0 +1,13 @@
+# OS & editor
+.DS_Store
+*.swp
+
+# Large device partition backups (keep MANIFEST.md, SHA256SUMS, build.prop)
+backups/*.img
+backups/apks/
+backups/bootanimation.stock.zip
+
+# Build outputs & local dev data
+dist/
+server/data/
+android/debug.keystore

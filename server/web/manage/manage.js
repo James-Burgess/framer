@@ -466,11 +466,72 @@
     });
   }
 
+  let nextQueueId = 1;
+  let activePrepCount = 0;
+  const MAX_CONCURRENT_PREP = 2;
+
   function handleSelectedFiles(fileList) {
     const incoming = Array.from(fileList).filter(isAcceptedImage);
-    if (incoming.length > 0) {
-      state.selectedFiles = state.selectedFiles.concat(incoming);
+    if (incoming.length === 0) return;
+
+    incoming.forEach((file) => {
+      const entry = {
+        id: nextQueueId++,
+        file,
+        status: "queued", // "queued" | "preparing" | "ready" | "error"
+        stage: isHeicFile(file) ? "Converting" : "Optimizing",
+        previewUrl: "",
+        prepared: null,
+        error: "",
+      };
+      // Show immediate preview for non-HEIC files while optimizing in background
+      if (!isHeicFile(file)) {
+        entry.previewUrl = URL.createObjectURL(file);
+      }
+      state.selectedFiles.push(entry);
+    });
+
+    renderSelectedFiles();
+    pumpPrepQueue();
+  }
+
+  function pumpPrepQueue() {
+    while (activePrepCount < MAX_CONCURRENT_PREP) {
+      const next = state.selectedFiles.find((item) => item.status === "queued");
+      if (!next) break;
+      next.status = "preparing";
+      activePrepCount++;
+      renderSelectedFiles();
+
+      preparePhotoForUpload(next.file, (stage) => {
+        next.stage = stage.includes("HEIC") ? "Converting" : "Optimizing";
+      })
+        .then((prepared) => {
+          // Only update if user hasn't removed it from the queue
+          if (!state.selectedFiles.includes(next)) return;
+          if (next.previewUrl) URL.revokeObjectURL(next.previewUrl);
+          next.prepared = prepared;
+          next.previewUrl = URL.createObjectURL(prepared.blob);
+          next.status = "ready";
+        })
+        .catch((err) => {
+          if (!state.selectedFiles.includes(next)) return;
+          next.status = "error";
+          next.error = err?.message || "Unsupported";
+        })
+        .finally(() => {
+          activePrepCount--;
+          renderSelectedFiles();
+          pumpPrepQueue();
+        });
     }
+  }
+
+  function clearSelectedFiles() {
+    state.selectedFiles.forEach((item) => {
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    });
+    state.selectedFiles = [];
     renderSelectedFiles();
   }
 
@@ -478,39 +539,67 @@
     const wrap = $("#preview-wrap");
     const grid = $("#preview-grid");
     grid.innerHTML = "";
-    state.selectedFiles.forEach((f, idx) => {
+
+    state.selectedFiles.forEach((item, idx) => {
       const div = document.createElement("div");
       div.className = "preview-item";
-      const img = document.createElement("img");
-      img.src = URL.createObjectURL(f);
-      img.alt = f.name;
-      img.onerror = () => {
-        img.remove();
+
+      if (item.status === "error") {
+        const fb = document.createElement("div");
+        fb.className = "preview-heic-fallback preview-error";
+        fb.title = item.error;
+        fb.innerHTML = `<strong>Error</strong><span>${esc(item.file.name)}</span>`;
+        div.appendChild(fb);
+      } else if (item.previewUrl) {
+        const img = document.createElement("img");
+        img.src = item.previewUrl;
+        img.alt = item.file.name;
+        div.appendChild(img);
+      } else {
         const fb = document.createElement("div");
         fb.className = "preview-heic-fallback";
-        fb.innerHTML = `<strong>${isHeicFile(f) ? "HEIC" : "IMG"}</strong><span>${esc(f.name)}</span>`;
-        div.insertBefore(fb, div.firstChild);
-      };
+        fb.innerHTML = `<div class="preview-spinner" aria-hidden="true"></div><span>${esc(item.stage || "Preparing")}…</span>`;
+        div.appendChild(fb);
+      }
+
       const rm = document.createElement("button");
       rm.type = "button";
       rm.className = "preview-remove";
-      rm.setAttribute("aria-label", `Remove ${f.name}`);
+      rm.setAttribute("aria-label", `Remove ${item.file.name}`);
       rm.textContent = "×";
       rm.addEventListener("click", () => {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
         state.selectedFiles.splice(idx, 1);
         renderSelectedFiles();
+        pumpPrepQueue();
       });
-      div.appendChild(img);
       div.appendChild(rm);
       grid.appendChild(div);
     });
 
-    const count = state.selectedFiles.length;
-    wrap.classList.toggle("hidden", count === 0);
-    $("#preview-count").textContent = `${count} ${count === 1 ? "photo" : "photos"} selected`;
+    const total = state.selectedFiles.length;
+    const readyCount = state.selectedFiles.filter((i) => i.status === "ready").length;
+    const pendingCount = state.selectedFiles.filter((i) => i.status === "queued" || i.status === "preparing").length;
+
+    wrap.classList.toggle("hidden", total === 0);
+    $("#preview-count").textContent = pendingCount > 0
+      ? `Preparing ${readyCount} of ${total} ${total === 1 ? "photo" : "photos"}…`
+      : `${total} ${total === 1 ? "photo" : "photos"} ready`;
+
     const btn = $("#btn-upload");
-    btn.disabled = count === 0;
-    btn.textContent = count > 1 ? `Send ${count} Photos to Frame` : "Send to Frame";
+    if (total === 0) {
+      btn.disabled = true;
+      btn.textContent = "Send to Frame";
+    } else if (pendingCount > 0) {
+      btn.disabled = true;
+      btn.textContent = `Optimizing (${readyCount}/${total})…`;
+    } else if (readyCount === 0) {
+      btn.disabled = true;
+      btn.textContent = "No valid photos";
+    } else {
+      btn.disabled = false;
+      btn.textContent = readyCount > 1 ? `Send ${readyCount} Photos to Frame` : "Send to Frame";
+    }
   }
 
   function bindEvents() {
@@ -541,15 +630,13 @@
       dz.classList.remove("dragover");
       handleSelectedFiles(e.dataTransfer.files);
     });
-    $("#btn-clear-files").addEventListener("click", () => {
-      state.selectedFiles = [];
-      renderSelectedFiles();
-    });
+    $("#btn-clear-files").addEventListener("click", clearSelectedFiles);
 
-    // Upload submit with browser-side HEIC conversion, high-res optimization & sequential per-photo upload
+    // Upload submit: uses already-converted/optimized items for instant sending
     $("#upload-form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      if (state.selectedFiles.length === 0) return;
+      const readyItems = state.selectedFiles.filter((item) => item.status === "ready" && item.prepared);
+      if (readyItems.length === 0) return;
 
       const sender = $("#up-sender").value.trim();
       if (sender) localStorage.setItem("frmaeo_sender", sender);
@@ -565,8 +652,7 @@
       const pctEl = $("#upload-progress-pct");
       const btn = $("#btn-upload");
 
-      const queue = state.selectedFiles.slice();
-      const total = queue.length;
+      const total = readyItems.length;
       let uploadedCount = 0;
       const failed = [];
 
@@ -577,17 +663,12 @@
       btn.textContent = "Sending…";
 
       for (let i = 0; i < total; i++) {
-        const file = queue[i];
+        const item = readyItems[i];
         const basePct = (i / total) * 100;
         const slicePct = 100 / total;
         try {
-          labelEl.textContent = `Preparing ${i + 1} of ${total}…`;
-          const prepared = await preparePhotoForUpload(file, (stage) => {
-            labelEl.textContent = `${stage} (${i + 1} of ${total})…`;
-          });
-
           labelEl.textContent = `Sending ${i + 1} of ${total}…`;
-          await uploadSingleFile(prepared, meta, (frac) => {
+          await uploadSingleFile(item.prepared, meta, (frac) => {
             const pct = Math.min(100, Math.round(basePct + frac * slicePct));
             bar.style.width = `${pct}%`;
             pctEl.textContent = `${pct}%`;
@@ -598,26 +679,23 @@
           bar.style.width = `${donePct}%`;
           pctEl.textContent = `${donePct}%`;
         } catch (err) {
-          failed.push(`${file.name}: ${err.message || "failed"}`);
+          failed.push(`${item.file.name}: ${err.message || "failed"}`);
         }
       }
 
       wrap.classList.add("hidden");
       if (uploadedCount > 0 && failed.length === 0) {
         showToast(`Sent ${uploadedCount} ${uploadedCount === 1 ? "photo" : "photos"} to The Jimmy Frame`);
-        state.selectedFiles = [];
         $("#up-caption").value = "";
-        renderSelectedFiles();
+        clearSelectedFiles();
         await refreshAll();
       } else if (uploadedCount > 0) {
         showToast(`Sent ${uploadedCount} of ${total} photos (${failed.length} skipped: ${failed[0]})`);
-        state.selectedFiles = [];
-        renderSelectedFiles();
+        clearSelectedFiles();
         await refreshAll();
       } else {
-        showToast(`Upload failed: ${failed[0] || "Unsupported image format"}`);
-        btn.disabled = false;
-        btn.textContent = total > 1 ? `Send ${total} Photos to Frame` : "Send to Frame";
+        showToast(`Upload failed: ${failed[0] || "Could not upload photo"}`);
+        renderSelectedFiles();
       }
     });
 

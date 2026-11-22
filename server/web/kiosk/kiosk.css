@@ -1172,3 +1172,73 @@ html, body {
   .dock-btn { min-width: 54px; padding: 6px; }
   .dock-btn span { display: none; }
 }
+
+/* Diagnostics / debug screen */
+.debug-card { width: min(1080px, 96vw); max-height: 92vh; }
+.debug-title { display: flex; align-items: center; gap: 14px; }
+.debug-title h2 { margin: 0; }
+.debug-header-actions { display: flex; align-items: center; gap: 10px; }
+.debug-header-actions .btn-ghost { height: 40px; padding: 0 16px; font-size: 14px; }
+.debug-header-actions .btn-ghost:disabled { opacity: 0.5; }
+
+.debug-summary {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+}
+.debug-summary.is-ok { background: rgba(118, 200, 147, 0.18); color: var(--lime); }
+.debug-summary.is-warn { background: rgba(217, 237, 146, 0.16); color: #f2d675; }
+.debug-summary.is-fail { background: rgba(226, 92, 92, 0.2); color: #ff9494; }
+
+.debug-body { padding-top: 8px; }
+.debug-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.debug-group { margin-bottom: 18px; }
+.debug-group h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.debug-list {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+.debug-row {
+  display: grid;
+  grid-template-columns: 12px 132px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(153, 217, 140, 0.08);
+  font-size: 14px;
+}
+.debug-row:last-child { border-bottom: 0; }
+.debug-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.3); }
+.debug-row.is-ok .debug-dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(118, 200, 147, 0.18); }
+.debug-row.is-warn .debug-dot { background: #f2d675; box-shadow: 0 0 0 3px rgba(242, 214, 117, 0.18); }
+.debug-row.is-fail .debug-dot { background: var(--danger); box-shadow: 0 0 0 3px rgba(226, 92, 92, 0.22); }
+.debug-row.is-info .debug-dot { background: var(--teal); }
+.debug-label { color: var(--muted); }
+.debug-value {
+  color: var(--text);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.debug-row.is-fail .debug-value { color: #ff9494; }
+
+@media (max-width: 900px) {
+  .debug-cols { grid-template-columns: 1fr; }
+}

@@ -94,6 +94,14 @@
         showToast("Reboot runs natively on the Android frame.");
       }
     },
+    getDiagnostics() {
+      if (this.isNative() && window.FrameBridge.getDiagnostics) {
+        try {
+          return JSON.parse(window.FrameBridge.getDiagnostics());
+        } catch (_) {}
+      }
+      return null;
+    },
   };
 
   // API helpers
@@ -490,10 +498,6 @@
     $("#empty-url").textContent = s.friendlyUrl || s.manageUrl;
     $("#qr-friendly-url").textContent = s.friendlyUrl || "http://frame.local:8080/manage";
     $("#qr-lan-url").textContent = s.lanIp ? `http://${s.lanIp}:${s.port}/manage` : "Not connected";
-    if (s.tailscaleIp) {
-      $("#qr-ts-row").classList.remove("hidden");
-      $("#qr-ts-url").textContent = `http://${s.tailscaleIp}:${s.port}/manage`;
-    }
 
     if (s.totalBytes > 0) {
       const usedGB = (s.usedBytes / 1e9).toFixed(1);
@@ -517,6 +521,149 @@
       parts.push(mins >= 60 ? `Uptime ${Math.floor(mins / 60)}h ${mins % 60}m` : `Uptime ${mins}m`);
     }
     $("#device-sys-info").textContent = parts.join(" · ");
+  }
+
+  // Diagnostics / debug screen
+  let diagRunning = false;
+
+  function fmtDuration(sec) {
+    if (sec == null || Number.isNaN(sec)) return "—";
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  function diagRow(status, label, value) {
+    return { status, label, value: value == null || value === "" ? "—" : String(value) };
+  }
+
+  function renderDiagList(el, rows) {
+    el.innerHTML = rows
+      .map(
+        (r) => `<div class="debug-row is-${r.status}">
+          <span class="debug-dot" aria-hidden="true"></span>
+          <span class="debug-label">${esc(r.label)}</span>
+          <span class="debug-value">${esc(r.value)}</span>
+        </div>`
+      )
+      .join("");
+  }
+
+  async function runDiagnostics() {
+    if (diagRunning) return;
+    diagRunning = true;
+    const summary = $("#debug-summary");
+    summary.textContent = "Checking…";
+    summary.className = "debug-summary";
+    $("#debug-refresh").disabled = true;
+
+    let stats = null;
+    try {
+      stats = await apiJSON("/api/system/stats");
+      state.stats = stats;
+    } catch (_) {}
+
+    // Native bridge call blocks briefly (root shell); let the UI paint first.
+    await new Promise((r) => setTimeout(r, 60));
+    const native = Bridge.isNative();
+    const d = native ? Bridge.getDiagnostics() : null;
+
+    const net = [];
+    const frame = [];
+
+    if (!native) {
+      net.push(diagRow("info", "Native checks", "Only available on the frame itself"));
+      if (stats) {
+        net.push(diagRow(stats.lanIp ? "ok" : "warn", "LAN address", stats.lanIp || "Not detected"));
+      }
+    } else if (!d) {
+      net.push(diagRow("fail", "Native bridge", "Diagnostics call failed"));
+    } else {
+      const w = d.wifi || {};
+      if (!w.enabled) {
+        net.push(diagRow("fail", "Wi-Fi", "Turned off"));
+      } else if (!w.ssid) {
+        net.push(diagRow("fail", "Wi-Fi", "Not connected"));
+      } else {
+        const bars = w.signal != null ? `${w.signal}/4 bars` : "";
+        net.push(diagRow(w.signal != null && w.signal <= 1 ? "warn" : "ok", "Wi-Fi", [w.ssid, bars, w.rssi != null ? `${w.rssi} dBm` : ""].filter(Boolean).join(" · ")));
+      }
+      net.push(diagRow(stats && stats.lanIp ? "ok" : "warn", "LAN address", stats && stats.lanIp ? stats.lanIp : "Not detected"));
+      net.push(diagRow(d.internet ? "ok" : "fail", "Internet", d.internet ? "Reachable" : "No response from 1.1.1.1"));
+
+      if (!d.rootOk) {
+        net.push(diagRow("fail", "Root access", "su did not respond; ADB checks unavailable"));
+      }
+
+      const adb = d.adb || {};
+      const port = adb.tcpPort || adb.persistPort;
+      if (adb.listening && port) {
+        const host = (stats && stats.lanIp) || "frame";
+        net.push(diagRow("ok", "Remote ADB", `adb connect ${host}:${port}`));
+      } else {
+        net.push(diagRow("warn", "Remote ADB", "Not listening on TCP"));
+      }
+    }
+
+    // Frame health
+    if (stats) {
+      frame.push(diagRow("ok", "Frame server", `v${stats.version} · up ${fmtDuration(stats.uptimeSec)}`));
+      if (d && d.deviceUptimeSec != null) frame.push(diagRow("info", "Device uptime", fmtDuration(d.deviceUptimeSec)));
+      if (d && d.memTotalKb) {
+        const availMB = Math.round(d.memAvailKb / 1024);
+        const totalMB = Math.round(d.memTotalKb / 1024);
+        frame.push(diagRow(availMB < 120 ? "warn" : "ok", "Memory", `${availMB} MB free of ${totalMB} MB`));
+      }
+      if (stats.totalBytes > 0) {
+        const freeGB = stats.freeBytes / 1e9;
+        frame.push(diagRow(freeGB < 1 ? "warn" : "ok", "Storage", `${freeGB.toFixed(1)} GB free of ${(stats.totalBytes / 1e9).toFixed(1)} GB`));
+      }
+      const c = stats.counts || {};
+      frame.push(diagRow(c.family > 0 ? "ok" : "info", "Photos", `${c.family || 0} family · ${c.public || 0} public · ${c.favorites || 0} favorites`));
+      const ps = stats.publicStatus || {};
+      if (ps.refreshing) {
+        frame.push(diagRow("info", "Public feed", `Downloading ${ps.done || 0}/${ps.total || 0}`));
+      } else if (ps.lastError) {
+        frame.push(diagRow("warn", "Public feed", ps.lastError));
+      } else {
+        frame.push(diagRow("ok", "Public feed", `${ps.cached != null ? ps.cached : c.public || 0} cached`));
+      }
+      frame.push(diagRow("info", "Mode", `${state.settings.mode}${state.settings.sleepEnabled ? ` · sleeps ${state.settings.sleepStart}–${state.settings.sleepEnd}` : ""}`));
+    } else {
+      frame.push(diagRow("fail", "Frame server", "Not responding"));
+    }
+
+    renderDiagList($("#debug-net"), net);
+    renderDiagList($("#debug-frame"), frame);
+
+    const all = net.concat(frame);
+    const fails = all.filter((r) => r.status === "fail").length;
+    const warns = all.filter((r) => r.status === "warn").length;
+    if (fails) {
+      summary.textContent = `${fails} problem${fails > 1 ? "s" : ""}${warns ? ` · ${warns} warning${warns > 1 ? "s" : ""}` : ""}`;
+      summary.classList.add("is-fail");
+    } else if (warns) {
+      summary.textContent = `${warns} warning${warns > 1 ? "s" : ""}`;
+      summary.classList.add("is-warn");
+    } else {
+      summary.textContent = "All good";
+      summary.classList.add("is-ok");
+    }
+
+    const nativeInfo = Bridge.getDeviceInfo();
+    const wv = (navigator.userAgent.match(/Chrome\/([\d.]+)/) || [])[1];
+    const foot = [];
+    if (nativeInfo && nativeInfo.model) foot.push(nativeInfo.model.replace(/_/g, " "));
+    if (nativeInfo && nativeInfo.androidVersion) foot.push(`Android ${nativeInfo.androidVersion}`);
+    if (wv) foot.push(`WebView ${wv.split(".")[0]}`);
+    foot.push(`Checked ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`);
+    $("#debug-footer").textContent = foot.join(" · ");
+
+    $("#debug-refresh").disabled = false;
+    diagRunning = false;
   }
 
   function updatePublicStatus(ps) {
@@ -634,6 +781,8 @@
     } else if (id === "settings-modal") {
       $("#settings-qr").src = `/api/qr.svg?t=${Date.now()}`;
       loadSystemStats();
+    } else if (id === "debug-modal") {
+      runDiagnostics();
     }
   }
 
@@ -952,7 +1101,11 @@
 
     // Device actions
     $("#btn-wifi").addEventListener("click", () => Bridge.openWifiSettings());
-    $("#btn-tailscale").addEventListener("click", () => Bridge.launchApp("com.tailscale.ipn", "Tailscale"));
+    $("#btn-debug").addEventListener("click", () => {
+      closeModal("settings-modal");
+      openModal("debug-modal");
+    });
+    $("#debug-refresh").addEventListener("click", runDiagnostics);
     $("#btn-reload").addEventListener("click", () => window.location.reload());
     $("#btn-reboot").addEventListener("click", () => {
       if (confirm("Reboot the photo frame now?")) {
@@ -966,9 +1119,11 @@
       else if (e.key === "ArrowLeft") prevSlide(true);
       else if (e.key === " ") setPaused(!state.paused);
       else if (e.key === "i") openModal("info-drawer");
+      else if (e.key === "d") openModal("debug-modal");
       else if (e.key === "Escape") {
         closeModal("info-drawer");
         closeModal("settings-modal");
+        closeModal("debug-modal");
         hideHUD();
       }
     });

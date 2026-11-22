@@ -72,30 +72,6 @@ public class ServerManager {
             }
         }, "frmaeo-supervisor");
         supervisorThread.start();
-        startTailscaleIfInstalled();
-    }
-
-    private void startTailscaleIfInstalled() {
-        final File script = new File("/data/tailscale/start.sh");
-        if (!script.exists()) return;
-        new Thread(() -> {
-            try {
-                Log.i(TAG, "Starting native tailscaled via " + script.getAbsolutePath());
-                Process p = new ProcessBuilder("su", "0", "sh", script.getAbsolutePath())
-                        .redirectErrorStream(true)
-                        .start();
-                try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        Log.i(TAG, "[tailscale] " + line);
-                    }
-                }
-                int code = p.waitFor();
-                Log.i(TAG, "tailscale start.sh exited with code " + code);
-            } catch (Exception e) {
-                Log.w(TAG, "Failed to start tailscaled", e);
-            }
-        }, "frmaeo-tailscale").start();
     }
 
     public synchronized void stop() {

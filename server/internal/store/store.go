@@ -64,25 +64,44 @@ type Photo struct {
 	PublicMeta *PublicMeta `json:"publicMeta,omitempty"`
 }
 
+type Notice struct {
+	Text      string     `json:"text"`
+	From      string     `json:"from,omitempty"`
+	Tone      string     `json:"tone,omitempty"` // "ocean" | "teal" | "sun"
+	UpdatedAt time.Time  `json:"updatedAt,omitempty"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+}
+
+func (n *Notice) IsActive(now time.Time) bool {
+	if n == nil || strings.TrimSpace(n.Text) == "" {
+		return false
+	}
+	if n.ExpiresAt != nil && now.After(*n.ExpiresAt) {
+		return false
+	}
+	return true
+}
+
 type Settings struct {
-	Mode          string `json:"mode"`          // "family" | "public" | "mix"
-	Album         string `json:"album"`         // "" (all) | "favorites" | <album name>
-	IntervalSec   int    `json:"intervalSec"`   // 10, 20, 30, 60, 300, 900
-	Order         string `json:"order"`         // "shuffle" | "newest" | "chronological"
-	Transition    string `json:"transition"`    // "fade" | "kenburns" | "slide"
-	FitMode       string `json:"fitMode"`       // "ambient" | "fill" | "matte"
-	ShowClock     bool   `json:"showClock"`
-	Clock24h      bool   `json:"clock24h"`
-	ShowCaption   bool   `json:"showCaption"`
-	ShowDateBadge bool   `json:"showDateBadge"`
-	PublicSource   string `json:"publicSource"`   // legacy/provider filter or category ("all" | "fine_art" | "nature" | "space" | "architecture" | "vintage" | "search:<q>")
-	PublicCategory string `json:"publicCategory"` // active public category or "search:<q>"
-	Brightness    int    `json:"brightness"`   // 0..255
-	SleepEnabled  bool   `json:"sleepEnabled"`
-	SleepStart    string `json:"sleepStart"` // "HH:MM"
-	SleepEnd      string `json:"sleepEnd"`   // "HH:MM"
-	FamilyToken   string `json:"familyToken"`
-	FrameName     string `json:"frameName"`
+	Mode           string  `json:"mode"`          // "family" | "public" | "mix"
+	Album          string  `json:"album"`         // "" (all) | "favorites" | <album name>
+	IntervalSec    int     `json:"intervalSec"`   // 10, 20, 30, 60, 300, 900
+	Order          string  `json:"order"`         // "shuffle" | "newest" | "chronological"
+	Transition     string  `json:"transition"`    // "fade" | "kenburns" | "slide"
+	FitMode        string  `json:"fitMode"`       // "ambient" | "fill" | "matte"
+	ShowClock      bool    `json:"showClock"`
+	Clock24h       bool    `json:"clock24h"`
+	ShowCaption    bool    `json:"showCaption"`
+	ShowDateBadge  bool    `json:"showDateBadge"`
+	PublicSource   string  `json:"publicSource"`   // legacy/provider filter or category ("all" | "fine_art" | "nature" | "space" | "architecture" | "vintage" | "search:<q>")
+	PublicCategory string  `json:"publicCategory"` // active public category or "search:<q>"
+	Brightness     int     `json:"brightness"`     // 0..255
+	SleepEnabled   bool    `json:"sleepEnabled"`
+	SleepStart     string  `json:"sleepStart"` // "HH:MM"
+	SleepEnd       string  `json:"sleepEnd"`   // "HH:MM"
+	FamilyToken    string  `json:"familyToken"`
+	FrameName      string  `json:"frameName"`
+	Notice         *Notice `json:"notice,omitempty"`
 }
 
 type Library struct {
@@ -119,7 +138,7 @@ func DefaultSettings(token string) Settings {
 		SleepStart:    "22:00",
 		SleepEnd:      "07:00",
 		FamilyToken:   token,
-		FrameName:     "Dad's Frame",
+		FrameName:     "The Jimmy Frame",
 	}
 }
 
@@ -164,6 +183,9 @@ func Open(dataDir string, tokenOverride string) (*Store, error) {
 		}
 		if s.settings.FamilyToken == "" {
 			s.settings.FamilyToken = generateFriendlyToken()
+		}
+		if s.settings.FrameName == "" || s.settings.FrameName == "Dad's Frame" {
+			s.settings.FrameName = "The Jimmy Frame"
 		}
 	} else {
 		s.settings = DefaultSettings(tokenOverride)
@@ -213,7 +235,32 @@ func (s *Store) PublicCacheDir() string {
 func (s *Store) GetSettings() Settings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.settings
+	st := s.settings
+	if st.Notice != nil && !st.Notice.IsActive(time.Now()) {
+		st.Notice = nil
+	}
+	return st
+}
+
+func (s *Store) SetNotice(n *Notice) (Settings, error) {
+	return s.UpdateSettings(func(st *Settings) {
+		if n == nil || strings.TrimSpace(n.Text) == "" {
+			st.Notice = nil
+			return
+		}
+		cp := *n
+		cp.Text = strings.TrimSpace(cp.Text)
+		cp.From = strings.TrimSpace(cp.From)
+		switch cp.Tone {
+		case "ocean", "teal", "sun":
+		default:
+			cp.Tone = "ocean"
+		}
+		if cp.UpdatedAt.IsZero() {
+			cp.UpdatedAt = time.Now().UTC()
+		}
+		st.Notice = &cp
+	})
 }
 
 func (s *Store) UpdateSettings(fn func(*Settings)) (Settings, error) {

@@ -152,3 +152,41 @@ func TestAuthAndUploadLifecycle(t *testing.T) {
 		t.Fatalf("persisted photo mismatch: %+v err=%v", p, err)
 	}
 }
+
+func TestNoticeLifecycle(t *testing.T) {
+	_, st, h := newTestServer(t)
+
+	if got := st.GetSettings().FrameName; got != "The Jimmy Frame" {
+		t.Fatalf("expected default frame name 'The Jimmy Frame', got %q", got)
+	}
+
+	// Set a notice with token
+	req := httptest.NewRequest(http.MethodPost, "/api/notice", strings.NewReader(`{"text":"Dinner at 6pm!","from":"James","tone":"sun","durationMin":120}`))
+	req.Header.Set("X-Frame-Token", "secret-1234")
+	req.RemoteAddr = "10.0.0.55:41234"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("set notice failed: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Fetch notice
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/notice", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Dinner at 6pm!") {
+		t.Fatalf("get notice mismatch: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Clear notice
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/notice", nil)
+	delReq.Header.Set("X-Frame-Token", "secret-1234")
+	delReq.RemoteAddr = "10.0.0.55:41234"
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, delReq)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete notice failed: %d %s", rec.Code, rec.Body.String())
+	}
+	if st.GetSettings().Notice != nil {
+		t.Fatalf("expected notice to be nil after delete")
+	}
+}

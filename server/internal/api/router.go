@@ -83,6 +83,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/slideshow", s.handleSlideshow)
 	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
 	mux.HandleFunc("PATCH /api/settings", s.handlePatchSettings)
+	mux.HandleFunc("GET /api/notice", s.handleGetNotice)
+	mux.HandleFunc("POST /api/notice", s.handleSetNotice)
+	mux.HandleFunc("DELETE /api/notice", s.handleClearNotice)
 	mux.HandleFunc("POST /api/photos/{id}/favorite", s.handleFavorite)
 	mux.HandleFunc("POST /api/photos/{id}/hide", s.handleHide)
 	mux.HandleFunc("POST /api/photos/{id}/rotate", s.handleRotate)
@@ -297,6 +300,77 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 
 	s.Broadcast("settings_changed", updated)
 	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) handleGetNotice(w http.ResponseWriter, r *http.Request) {
+	st := s.store.GetSettings()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"notice": st.Notice,
+	})
+}
+
+func (s *Server) handleSetNotice(w http.ResponseWriter, r *http.Request) {
+	if !isLoopback(r.RemoteAddr) && !s.validToken(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+		return
+	}
+	var body struct {
+		Text        string `json:"text"`
+		From        string `json:"from"`
+		Tone        string `json:"tone"`
+		DurationMin int    `json:"durationMin"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	text := strings.TrimSpace(body.Text)
+	if len(text) > 180 {
+		text = text[:180]
+	}
+	from := strings.TrimSpace(body.From)
+	if len(from) > 40 {
+		from = from[:40]
+	}
+
+	var notice *store.Notice
+	if text != "" {
+		now := time.Now().UTC()
+		notice = &store.Notice{
+			Text:      text,
+			From:      from,
+			Tone:      body.Tone,
+			UpdatedAt: now,
+		}
+		if body.DurationMin > 0 {
+			exp := now.Add(time.Duration(body.DurationMin) * time.Minute)
+			notice.ExpiresAt = &exp
+		}
+	}
+
+	updated, err := s.store.SetNotice(notice)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.Broadcast("notice_changed", map[string]any{"notice": updated.Notice})
+	s.Broadcast("settings_changed", updated)
+	writeJSON(w, http.StatusOK, map[string]any{"notice": updated.Notice})
+}
+
+func (s *Server) handleClearNotice(w http.ResponseWriter, r *http.Request) {
+	if !isLoopback(r.RemoteAddr) && !s.validToken(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+		return
+	}
+	updated, err := s.store.SetNotice(nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.Broadcast("notice_changed", map[string]any{"notice": nil})
+	s.Broadcast("settings_changed", updated)
+	writeJSON(w, http.StatusOK, map[string]any{"notice": nil})
 }
 
 func (s *Server) handleFavorite(w http.ResponseWriter, r *http.Request) {
@@ -557,9 +631,9 @@ func (s *Server) handleManageList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
-	// Up to 64 MB per batch upload
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
-	if err := r.ParseMultipartForm(16 << 20); err != nil {
+	// Up to 256 MB per request (individual files capped at 100 MB)
+	r.Body = http.MaxBytesReader(w, r.Body, 256<<20)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "upload too large or invalid form"})
 		return
 	}
@@ -567,6 +641,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	caption := strings.TrimSpace(r.FormValue("caption"))
 	sender := strings.TrimSpace(r.FormValue("sender"))
 	album := strings.TrimSpace(r.FormValue("album"))
+	takenAtFallback := strings.TrimSpace(r.FormValue("takenAt"))
 
 	files := r.MultipartForm.File["files"]
 	if len(files) == 0 {
@@ -586,7 +661,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			errs = append(errs, fh.Filename+": "+err.Error())
 			continue
 		}
-		raw, err := io.ReadAll(io.LimitReader(f, 32<<20))
+		raw, err := io.ReadAll(io.LimitReader(f, 100<<20))
 		_ = f.Close()
 		if err != nil {
 			errs = append(errs, fh.Filename+": "+err.Error())
@@ -602,6 +677,16 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			errs = append(errs, fh.Filename+": "+err.Error())
 			continue
+		}
+
+		if takenAtFallback != "" {
+			if _, parseErr := time.Parse(time.RFC3339, takenAtFallback); parseErr == nil {
+				if res.Exif == nil {
+					res.Exif = &store.ExifData{TakenAt: takenAtFallback}
+				} else if res.Exif.TakenAt == "" {
+					res.Exif.TakenAt = takenAtFallback
+				}
+			}
 		}
 
 		photo := &store.Photo{
